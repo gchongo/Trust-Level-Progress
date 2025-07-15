@@ -2,7 +2,7 @@ import { apiInitializer } from "discourse/lib/api";
 import { ajax } from "discourse/lib/ajax";
 import User from "discourse/models/user";
 
-// --- 文本翻译帮助函数 ---
+// --- 文本翻译帮助函数 (无变动) ---
 function getRequirementText(key, count, I18n) {
   const translations = {
     num_topics_replied_to: I18n.t("trust_levels.requirements.num_topics_replied_to", { count }),
@@ -25,20 +25,40 @@ function getRequirementText(key, count, I18n) {
 }
 
 export default apiInitializer("0.8", (api, { I18n }) => {
-  // --- 注册页面路由 ---
+  // --- ✅ **第一处修改**: 扩展路由表，同时注册两个新路由 ---
   api.modifyClass("route:application", {
     didTransition() {
       this._super(...arguments);
       const router = this.router;
-      if (!router.recognize("/u/username/trust-level-progress")) {
+      if (!router.recognize("/my-level")) {
          router.map(function () {
+           // 注册我们实际的进度页面路由
            this.route("user.trust-level-progress", { path: "/u/:username/trust-level-progress" });
+           // 注册用于跳转的入口路由
+           this.route("my-level", { path: "/my-level" });
          });
       }
     }
   });
 
-  // --- 定义页面数据和模板 ---
+  // --- ✅ **第二处修改**: 为 /my-level 路由创建一个新的控制器来处理跳转 ---
+  api.modifyClass("route:my-level", {
+    // `beforeModel` 是Ember路由中用于执行跳转或检查权限的最佳位置
+    beforeModel() {
+      const currentUser = this.currentUser; // 在路由控制器中，可以直接用 this.currentUser 获取用户
+
+      if (currentUser) {
+        // 如果用户已登录，使用 transitionTo (内部跳转) 到目标页面
+        this.transitionTo('user.trust-level-progress', currentUser.username_lower);
+      } else {
+        // 如果用户未登录，则重定向到登录页面
+        // 登录成功后，会自动返回到 /my-level，然后此逻辑会再次运行
+        window.location.href = `/login?redirect=${encodeURIComponent('/my-level')}`;
+      }
+    }
+  });
+
+  // --- 进度页面的数据获取逻辑 (无变动) ---
   api.modifyClass("route:user-trust-level-progress", {
     model() {
       const currentUser = this.modelFor("user");
@@ -46,7 +66,6 @@ export default apiInitializer("0.8", (api, { I18n }) => {
         (result) => {
           const stats = result.user_summary;
           const reqs = result.trust_level_requirements;
-
           const processRequirements = (levelReqs, currentStats) => {
             return Object.keys(levelReqs).map((key) => {
               const required = levelReqs[key];
@@ -60,21 +79,10 @@ export default apiInitializer("0.8", (api, { I18n }) => {
               };
             });
           };
-
           let nextLevel = currentUser.trust_level + 1;
           if (currentUser.trust_level === 4) nextLevel = 4;
-
           currentUser.set("next_trust_level_display", nextLevel > 4 ? "已最高" : `${nextLevel}`);
-
-          return {
-            user: currentUser,
-            stats: stats,
-            requirements: {
-              tl1: processRequirements(reqs.tl1, stats),
-              tl2: processRequirements(reqs.tl2, stats),
-              tl3: processRequirements(reqs.tl3, stats),
-            },
-          };
+          return { user: currentUser, stats: stats, requirements: { tl1: processRequirements(reqs.tl1, stats), tl2: processRequirements(reqs.tl2, stats), tl3: processRequirements(reqs.tl3, stats) }};
         }
       );
     },
@@ -83,7 +91,7 @@ export default apiInitializer("0.8", (api, { I18n }) => {
     },
   });
 
-  // --- 在用户菜单添加链接 ---
+  // --- 在用户菜单添加链接 (无变动) ---
   const currentUser = api.getCurrentUser();
   if (currentUser) {
     api.addNavigationBarItem({
@@ -95,20 +103,6 @@ export default apiInitializer("0.8", (api, { I18n }) => {
     });
   }
 
-
-  // --- 处理 /my-level 跳转 ---
-  api.onPageChange((url) => {
-    // ✅ **最终修正点**：使用 startsWith 代替 ===，使其能同时匹配 "/my-level" 和 "/my-level/"
-    if (url.startsWith("/my-level")) {
-      const loggedInUser = api.getCurrentUser();
-
-      if (loggedInUser) {
-        const username = loggedInUser.get("username_lower");
-        const finalUrl = `/u/${username}/trust-level-progress`;
-        require("discourse/lib/url").replaceWith(finalUrl);
-      } else {
-        window.location.href = "/login?redirect=/my-level";
-      }
-    }
-  });
+  // --- ✅ **第三处修改**: 删除无效的 onPageChange 代码块 ---
+  // 原有的 api.onPageChange(...) 代码块已被完全移除。
 });
