@@ -1,6 +1,6 @@
 import { apiInitializer } from "discourse/lib/api";
 import { ajax } from "discourse/lib/ajax";
-// 注意：这里不再从 "discourse/lib/url" 导入任何东西
+// 注意：我们不再需要从 "discourse/lib/url" 导入任何东西
 import User from "discourse/models/user";
 
 // --- 文本翻译帮助函数 ---
@@ -91,8 +91,8 @@ export default apiInitializer("0.8", (api, { I18n }) => {
       name: "trust_level_progress",
       displayName: "我的升级进度",
       title: "查看我的信任等级升级进度",
-      // ✅ **修正点**：在这里使用 require 的方式调用 route 函数
-      href: require("discourse/lib/url").route(`/u/${currentUser.username_lower}/trust-level-progress`),
+      // ✅ **最终修正点**：直接拼接URL字符串，不再使用任何有问题的函数
+      href: `/u/${currentUser.username_lower}/trust-level-progress`,
       forceActive: (category, args, router) => router.currentRouteName === "user.trust_level_progress",
     });
   }
@@ -106,7 +106,7 @@ export default apiInitializer("0.8", (api, { I18n }) => {
       if (loggedInUser) {
         const username = loggedInUser.get("username_lower");
         const finalUrl = `/u/${username}/trust-level-progress`;
-        // ✅ **修正点**：统一使用 require 的方式调用，保持代码一致性
+        // 这里使用 require 的方式是有效的，因为它执行的是页面跳转，而非生成链接
         require("discourse/lib/url").replaceWith(finalUrl);
       } else {
         window.location.href = "/login?redirect=/my-level";
