@@ -3,71 +3,67 @@ import { ajax } from "discourse/lib/ajax";
 
 export default apiInitializer("0.8", (api) => {
   api.onPageChange((url) => {
-    // 只在 /u/用户名/summary 页插入
-    if (!/^\/u\/[^\/]+\/summary$/.test(url)) return; // 只允许严格的 summary 页
+    // 严格只匹配用户 summary 页
+    if (!/^\/u\/[^\/]+(\/summary)?$/.test(url)) return;
 
     // 防止多次插入
-    if (document.querySelector(".tl-progress-inline")) return;
+    if (document.querySelector(".trust-level-progress-li")) return;
 
     // 获取用户名
     const matches = location.pathname.match(/^\/u\/([^\/]+)/);
     if (!matches) return;
     const username = matches[1];
 
-    // 等页面渲染目标容器
-    function insertProgress() {
-      const statsUl = document.querySelector(".user-main .top-section.stats-section ul");
+    // 等待统计区 ul 渲染出来
+    function tryInsert() {
+      // 只在 summary 页才有的容器
+      const statsUl = document.querySelector(".top-section.stats-section ul");
       if (!statsUl) {
-        setTimeout(insertProgress, 100); // 递归等待DOM
+        setTimeout(tryInsert, 100);
         return;
       }
 
+      // 获取数据并插入
       ajax(`/u/${username}/summary.json`).then(data => {
         const stats = data.user_summary;
+        // 你可以根据实际API字段名调整
         const requirements = [
-          { key: "days_visited", label: "访问天数（100天）", require: 50, current: stats.days_visited || 0 },
-          { key: "topics_replied_to", label: "回复的话题数", require: 10, current: stats.topics_replied_to || 0 },
-          { key: "topics_viewed", label: "浏览的话题（100天）", require: 500, current: stats.topics_viewed || 0 },
-          { key: "posts_read", label: "已读帖子（100天）", require: 20000, current: stats.posts_read || 0 },
-          { key: "likes_given", label: "点赞数", require: 30, current: stats.likes_given || 0 },
-          { key: "likes_received", label: "获赞数", require: 20, current: stats.likes_received || 0 },
-          { key: "likes_received_users", label: "获赞用户数", require: 5, current: stats.likes_received_users || 0 }
+          { label: "访问天数（100天）", require: 50, current: stats.days_visited || 0 },
+          { label: "回复的话题数", require: 10, current: stats.topics_replied_to || 0 },
+          { label: "浏览的话题（100天）", require: 500, current: stats.topics_viewed || 0 },
+          { label: "已读帖子（100天）", require: 20000, current: stats.posts_read || 0 },
+          { label: "点赞数", require: 30, current: stats.likes_given || 0 },
+          { label: "获赞数", require: 20, current: stats.likes_received || 0 },
+          { label: "获赞用户数", require: 5, current: stats.likes_received_users || 0 }
         ];
-        let rows = requirements.map(r => {
-          const ok = r.current >= r.require;
-          return `
-            <li class="tl-progress-inline-row">
-              <div class="user-stat">
-                <span class="label">${r.label}</span>
-                <span class="value">${r.current} / ${r.require}
-                  <span class="tl-progress-check" style="color:${ok ? "#28a745" : "#dc3545"};">
-                    ${ok ? "✔️" : "❌"}
-                  </span>
-                </span>
-              </div>
-            </li>
-          `;
-        }).join("");
-
         const allOK = requirements.every(r => r.current >= r.require);
 
-        const li = document.createElement("li");
-        li.className = "tl-progress-inline";
-        li.innerHTML = `
-          <div style="margin: 0.5em 0 0.2em; font-weight: bold; color: #555;">
-            信任级别 3 达标进度
-            <span style="font-size: 1em; color: ${allOK ? "#28a745" : "#dc3545"};">
-              ${allOK ? "（已达标 ✔️）" : "（未达标）"}
-            </span>
+        // 合成一行小统计HTML
+        let html = `
+          <div class="user-stat" style="flex-direction: column;align-items: flex-start;">
+            <span class="label" style="font-weight:bold;">信任等级3进度${allOK ? ' <span style="color:#28a745;">✔️</span>' : ' <span style="color:#dc3545;">❌</span>'}</span>
+            <div style="margin-top:3px;">
+              ${requirements.map(r => `
+                <span style="margin-right:10px;font-size:0.95em;">
+                  ${r.label}：
+                  <span style="font-weight:bold;">${r.current}</span> / ${r.require}
+                  <span style="font-size:1.1em;color:${r.current >= r.require ? "#28a745" : "#dc3545"};">
+                    ${r.current >= r.require ? "✔️" : "❌"}
+                  </span>
+                </span>
+              `).join("<br>")}
+            </div>
           </div>
-          <ul style="margin:0;padding-left:1.2em;">
-            ${rows}
-          </ul>
         `;
+
+        // 插入到 ul 里，作为一个新的 li
+        const li = document.createElement("li");
+        li.className = "trust-level-progress-li";
+        li.innerHTML = html;
         statsUl.appendChild(li);
       });
     }
 
-    insertProgress();
+    tryInsert();
   });
 });
