@@ -1,6 +1,6 @@
 import { apiInitializer } from "discourse/lib/api";
 import { ajax } from "discourse/lib/ajax";
-import { route, replaceWith } from "discourse/lib/url";
+// 注意：这里不再从 "discourse/lib/url" 导入任何东西
 import User from "discourse/models/user";
 
 // --- 文本翻译帮助函数 ---
@@ -85,23 +85,29 @@ export default apiInitializer("0.8", (api, { I18n }) => {
   });
 
   // --- 在用户菜单添加链接 ---
-  api.addNavigationBarItem({
-    name: "trust_level_progress",
-    displayName: "我的升级进度",
-    title: "查看我的信任等级升级进度",
-    href: route(`/u/${api.getCurrentUser()?.username_lower}/trust-level-progress`),
-    forceActive: (category, args, router) => router.currentRouteName === "user.trust_level_progress",
-  });
+  const currentUser = api.getCurrentUser();
+  if (currentUser) {
+    api.addNavigationBarItem({
+      name: "trust_level_progress",
+      displayName: "我的升级进度",
+      title: "查看我的信任等级升级进度",
+      // ✅ **修正点**：在这里使用 require 的方式调用 route 函数
+      href: require("discourse/lib/url").route(`/u/${currentUser.username_lower}/trust-level-progress`),
+      forceActive: (category, args, router) => router.currentRouteName === "user.trust_level_progress",
+    });
+  }
+
 
   // --- 处理 /my-level 跳转 ---
   api.onPageChange((url) => {
     if (url === "/my-level") {
-      const currentUser = api.getCurrentUser();
+      const loggedInUser = api.getCurrentUser();
 
-      if (currentUser) {
-        const username = currentUser.get("username_lower");
+      if (loggedInUser) {
+        const username = loggedInUser.get("username_lower");
         const finalUrl = `/u/${username}/trust-level-progress`;
-        replaceWith(finalUrl);
+        // ✅ **修正点**：统一使用 require 的方式调用，保持代码一致性
+        require("discourse/lib/url").replaceWith(finalUrl);
       } else {
         window.location.href = "/login?redirect=/my-level";
       }
